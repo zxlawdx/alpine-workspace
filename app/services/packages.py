@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
 
 from app.core.errors import api_error
 from app.services.jobs import job_manager
@@ -10,7 +9,7 @@ PRIV_HELPER = '/usr/local/libexec/pibic-workspace-priv'
 
 PACKAGES: dict[str, dict] = {
     'git': {'name': 'Git', 'description': 'Controle de versão distribuído.', 'packages': ['git']},
-    'python': {'name': 'Python', 'description': 'Interpretador Python 3.', 'packages': ['python3', 'py3-pip']},
+    'python': {'name': 'Python 3', 'description': 'Interpretador Python 3.', 'packages': ['python3']},
     'pip': {'name': 'pip', 'description': 'Gerenciador de pacotes Python.', 'packages': ['py3-pip']},
     'docker': {'name': 'Docker', 'description': 'Engine de containers.', 'packages': ['docker']},
     'compose': {'name': 'Docker Compose', 'description': 'Compose plugin/CLI para Docker.', 'packages': ['docker-cli-compose']},
