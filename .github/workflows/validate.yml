@@ -25,6 +25,7 @@ jobs:
         run: |
           node --check web/js/alpinews-v3.js
           node --check web/js/alpinews-v4-fixes.js
+          node --check web/js/alpinews-launcher.js
           node --check web/js/api.js
           node --check web/js/apps.js
           node --check web/js/desktop.js
@@ -32,11 +33,16 @@ jobs:
           node --check web/js/window-manager.js
       - name: Check active UI assets
         run: |
-          grep -q 'alpinews-v4.css?v=4.1.0' web/index.html
-          grep -q 'alpinews-v4-fixes.js?v=4.1.0' web/index.html
+          grep -q 'alpinews-v4.css?v=4.2.0' web/index.html
+          grep -q 'alpinews-v4-fixes.js?v=4.2.0' web/index.html
+          grep -q 'alpinews-launcher.css?v=4.2.0' web/index.html
+          grep -q 'alpinews-launcher.js?v=4.2.0' web/index.html
+          test -s web/css/alpinews-launcher.css
+          test -s web/js/alpinews-launcher.js
           ! grep -q 'ui-refresh.js' web/index.html
           ! grep -q 'ui-refresh.css' web/index.html
       - name: Validate deploy scripts
         run: |
           sh -n deploy/apply.sh
           sh -n update.sh
+          sh -n update-local.sh
