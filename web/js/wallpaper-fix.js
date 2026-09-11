@@ -12,6 +12,11 @@
   const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
   const MAX_DATA_URL_CHARS = 3_200_000;
 
+  const MIME_BY_EXT = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+    gif: 'image/gif', bmp: 'image/bmp', avif: 'image/avif'
+  };
+
   function cssUrl(value) {
     const clean = String(value || '')
       .trim()
@@ -53,6 +58,29 @@
     markCustomActive();
   }
 
+  function cleanupLegacyWallpaper() {
+    document.querySelectorAll('[data-wallpaper-section]').forEach((section) => section.remove());
+    const main = document.querySelector('#aws-main');
+    if (main?.classList.contains('aws-wallpaper-active')) {
+      main.classList.remove('aws-wallpaper-active');
+      main.style.removeProperty('background-image');
+    }
+  }
+
+  function installLegacyCleanup() {
+    cleanupLegacyWallpaper();
+    const main = document.querySelector('#aws-main');
+    if (main) {
+      new MutationObserver(() => {
+        if (main.classList.contains('aws-wallpaper-active')) {
+          main.classList.remove('aws-wallpaper-active');
+          main.style.removeProperty('background-image');
+        }
+      }).observe(main, {attributes: true, attributeFilter: ['class', 'style']});
+    }
+    new MutationObserver(() => cleanupLegacyWallpaper()).observe(document.body, {childList: true, subtree: true});
+  }
+
   function loadImage(source, timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -73,7 +101,7 @@
         }
         finish(resolve, img);
       };
-      img.onerror = () => finish(reject, new Error('O navegador não conseguiu abrir essa imagem. Use uma imagem JPG, PNG, WebP ou uma URL direta para o arquivo.'));
+      img.onerror = () => finish(reject, new Error('O navegador não conseguiu abrir essa imagem. Use JPG, PNG, WebP, GIF, BMP ou AVIF.'));
       img.src = source;
     });
   }
@@ -88,55 +116,78 @@
     return source;
   }
 
+  function fileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Falha ao ler o arquivo selecionado.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function inferredMime(file) {
+    const declared = String(file?.type || '').toLowerCase();
+    if (declared.startsWith('image/')) return declared;
+    const ext = String(file?.name || '').split('.').pop()?.toLowerCase() || '';
+    return MIME_BY_EXT[ext] || '';
+  }
+
+  function normalizeDataUrl(dataUrl, mime) {
+    if (!mime || dataUrl.startsWith('data:image/')) return dataUrl;
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) return dataUrl;
+    const meta = dataUrl.slice(0, comma);
+    const suffix = meta.includes(';base64') ? ';base64' : '';
+    return `data:${mime}${suffix}${dataUrl.slice(comma)}`;
+  }
+
   function encodeCanvas(canvas, quality) {
     return canvas.toDataURL('image/jpeg', quality);
   }
 
   async function fileToWallpaper(file) {
-    if (!file || !String(file.type || '').startsWith('image/')) {
-      throw new Error('Selecione um arquivo de imagem válido.');
-    }
+    if (!file) throw new Error('Selecione um arquivo de imagem válido.');
+    const mime = inferredMime(file);
+    if (!mime) throw new Error('Formato não reconhecido. Use JPG, PNG, WebP, GIF, BMP ou AVIF.');
     if (file.size > MAX_SOURCE_BYTES) {
       throw new Error('A imagem é muito grande. Use um arquivo de até 20 MB.');
     }
 
-    const objectUrl = URL.createObjectURL(file);
-    try {
-      const img = await loadImage(objectUrl);
-      const maxW = 1920;
-      const maxH = 1080;
-      const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
-      const width = Math.max(1, Math.round(img.naturalWidth * scale));
-      const height = Math.max(1, Math.round(img.naturalHeight * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d', {alpha: false});
-      if (!ctx) throw new Error('O navegador não conseguiu preparar a imagem.');
-      ctx.fillStyle = '#111';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+    let source = await fileAsDataUrl(file);
+    source = normalizeDataUrl(source, mime);
+    const img = await loadImage(source);
 
-      let data = encodeCanvas(canvas, 0.82);
-      if (data.length > MAX_DATA_URL_CHARS) {
-        const scale2 = Math.min(1, 1440 / width, 810 / height);
-        const canvas2 = document.createElement('canvas');
-        canvas2.width = Math.max(1, Math.round(width * scale2));
-        canvas2.height = Math.max(1, Math.round(height * scale2));
-        const ctx2 = canvas2.getContext('2d', {alpha: false});
-        if (!ctx2) throw new Error('O navegador não conseguiu reduzir a imagem.');
-        ctx2.fillStyle = '#111';
-        ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
-        ctx2.drawImage(canvas, 0, 0, canvas2.width, canvas2.height);
-        data = encodeCanvas(canvas2, 0.70);
-      }
-      if (data.length > MAX_DATA_URL_CHARS) {
-        throw new Error('A imagem ficou grande demais para ser salva no navegador. Tente uma imagem menor.');
-      }
-      return data;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
+    const maxW = 1920;
+    const maxH = 1080;
+    const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', {alpha: false});
+    if (!ctx) throw new Error('O navegador não conseguiu preparar a imagem.');
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    let data = encodeCanvas(canvas, 0.82);
+    if (data.length > MAX_DATA_URL_CHARS) {
+      const scale2 = Math.min(1, 1440 / width, 810 / height);
+      const canvas2 = document.createElement('canvas');
+      canvas2.width = Math.max(1, Math.round(width * scale2));
+      canvas2.height = Math.max(1, Math.round(height * scale2));
+      const ctx2 = canvas2.getContext('2d', {alpha: false});
+      if (!ctx2) throw new Error('O navegador não conseguiu reduzir a imagem.');
+      ctx2.fillStyle = '#111';
+      ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
+      ctx2.drawImage(canvas, 0, 0, canvas2.width, canvas2.height);
+      data = encodeCanvas(canvas2, 0.70);
     }
+    if (data.length > MAX_DATA_URL_CHARS) {
+      throw new Error('A imagem ficou grande demais para ser salva no navegador. Tente uma imagem menor.');
+    }
+    return data;
   }
 
   document.addEventListener('click', async (event) => {
@@ -184,4 +235,10 @@
       input.value = '';
     }
   }, true);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installLegacyCleanup, {once: true});
+  } else {
+    installLegacyCleanup();
+  }
 })();
