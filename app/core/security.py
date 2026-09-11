@@ -105,8 +105,37 @@ def csrf_ok(value: str | None) -> bool:
     return bool(value) and hmac.compare_digest(value, _CSRF_TOKEN)
 
 
-def session_payload() -> dict[str, str]:
-    return {"csrf": _CSRF_TOKEN}
+def session_payload() -> dict[str, object]:
+    """Return CSRF data plus the Unix identity actually running this Workspace.
+
+    PIBIC LAB starts one Workspace process from each authenticated SSH session. Using
+    the effective UID here keeps the UI tied to that real Unix account instead of a
+    hardcoded username in the browser bundle.
+    """
+
+    uid = os.geteuid()
+    gid = os.getegid()
+
+    try:
+        account = pwd.getpwuid(uid)
+        username = account.pw_name
+        home = account.pw_dir
+        shell = account.pw_shell
+    except (KeyError, OSError):
+        username = os.environ.get("USER") or os.environ.get("LOGNAME") or str(uid)
+        home = str(Path.home())
+        shell = os.environ.get("SHELL") or ""
+
+    return {
+        "csrf": _CSRF_TOKEN,
+        "username": username,
+        "uid": uid,
+        "gid": gid,
+        "home": home,
+        "shell": shell,
+        "role": "root" if uid == 0 else "ssh-user",
+        "role_label": "root" if uid == 0 else "usuário SSH",
+    }
 
 
 def set_session_cookie(response) -> None:
