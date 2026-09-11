@@ -1,20 +1,76 @@
 from __future__ import annotations
 
 import hmac
+import os
+import pwd
 import secrets
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, Request, WebSocket
 
 SESSION_COOKIE = "pibic_workspace_session"
-
-# A restart intentionally invalidates browser sessions. The user already authenticated
-# to the VM through SSH; this adds browser-local CSRF/origin protection on top.
-_SESSION_TOKEN = secrets.token_urlsafe(32)
-_CSRF_TOKEN = secrets.token_urlsafe(32)
-
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 _STATE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _state_dir() -> Path:
+    configured = os.environ.get("XDG_STATE_HOME")
+    if configured:
+        base = Path(configured).expanduser()
+    else:
+        try:
+            home = Path(pwd.getpwuid(os.geteuid()).pw_dir)
+        except (KeyError, OSError):
+            home = Path.home()
+        base = home / ".local" / "state"
+    path = base / "pibic-workspace"
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        path.chmod(0o700)
+    except OSError:
+        pass
+    return path
+
+
+def _persistent_secret(name: str) -> str:
+    """Keep browser sessions valid across service restarts.
+
+    The Workspace is already isolated on loopback and reached through SSH. Persisting
+    these random values avoids turning every OpenRC restart into a stale-cookie/401
+    loop while keeping the token local to the Unix account running the service.
+    """
+
+    path = _state_dir() / name
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+        if len(value) >= 32:
+            return value
+    except OSError:
+        pass
+
+    value = secrets.token_urlsafe(48)
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(value)
+            handle.write("\n")
+        os.replace(tmp, path)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return value
+
+
+_SESSION_TOKEN = _persistent_secret("browser-session.key")
+_CSRF_TOKEN = _persistent_secret("browser-csrf.key")
 
 
 def _host_only(value: str | None) -> str:
@@ -65,10 +121,14 @@ def set_session_cookie(response) -> None:
 
 
 def validate_request(request: Request) -> None:
-    if request.url.path == "/api/health":
-        return
+    # Host validation also applies to the health endpoint. Local SSH forwarding keeps
+    # Host as 127.0.0.1:<local-port>, which is accepted by _host_only().
     if not is_allowed_host(request.headers.get("host")):
         raise HTTPException(status_code=400, detail="Host não permitido")
+
+    if request.url.path == "/api/health":
+        return
+
     if request.url.path.startswith("/api/"):
         if not session_ok(request.cookies.get(SESSION_COOKIE)):
             raise HTTPException(status_code=401, detail="Sessão inválida")
