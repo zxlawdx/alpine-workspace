@@ -60,12 +60,28 @@ rollback() {
 
 trap rollback HUP INT TERM
 
-echo "[3/5] Validando Python..."
+echo "[3/5] Validando codigo..."
 python3 -m compileall -q "$TARGET/app" || rollback
 
+# Os scripts abaixo sao classic scripts, portanto podem ser validados diretamente
+# com node --check quando Node.js estiver disponivel na VM. Os modulos ES continuam
+# cobertos pelo CI do repositorio.
 if command -v node >/dev/null 2>&1; then
-    node --check "$TARGET/web/js/alpinews-v4.js" >/dev/null 2>&1 || rollback
+    for js in \
+        "$TARGET/web/js/alpinews-v3.js" \
+        "$TARGET/web/js/alpinews-v4-fixes.js" \
+        "$TARGET/web/js/alpinews-launcher.js"
+    do
+        [ -f "$js" ] || rollback
+        node --check "$js" >/dev/null 2>&1 || rollback
+    done
 fi
+
+# Garante que o novo launcher realmente foi copiado antes de reiniciar o servico.
+[ -f "$TARGET/web/css/alpinews-launcher.css" ] || rollback
+[ -f "$TARGET/web/js/alpinews-launcher.js" ] || rollback
+grep -q 'alpinews-launcher.css?v=4.2.0' "$TARGET/web/index.html" || rollback
+grep -q 'alpinews-launcher.js?v=4.2.0' "$TARGET/web/index.html" || rollback
 
 echo "[4/5] Reiniciando somente o Workspace..."
 rc-service pibic-workspace restart || rollback
@@ -82,5 +98,6 @@ echo
 echo "Atualizacao aplicada com sucesso."
 echo "Versao: $(cat "$TARGET/VERSION" 2>/dev/null || echo desconhecida)"
 echo "Workspace: http://127.0.0.1:8765"
+echo "Launcher: Aplicativos (GNOME/Windows Start style)"
 echo "A VM nao foi reiniciada."
 echo "SSH, rede e ZeroTier permaneceram fora desta atualizacao."
