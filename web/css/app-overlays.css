@@ -1,0 +1,36 @@
+/* Alpine Workspace 4.3 - legacy application overlays restored independently
+ * from the original app.css tail, which contains a parse break before these rules.
+ */
+html.aws-v4 #context-menu.context-menu{
+  position:fixed;z-index:110000;min-width:200px;padding:6px;
+  background:var(--aws-surface-container);border:1px solid var(--aws-outline-variant);
+  border-radius:9px;box-shadow:0 18px 55px rgba(0,0,0,.48);color:var(--aws-on-surface)
+}
+html.aws-v4 #context-menu.context-menu button{width:100%;height:32px;min-height:32px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;padding:0 9px!important;background:transparent!important;border-radius:6px!important;color:var(--aws-on-surface-variant)!important;text-align:left}
+html.aws-v4 #context-menu.context-menu button:hover{background:var(--aws-surface-container-high)!important;color:var(--aws-on-surface)!important}
+html.aws-v4 #context-menu.context-menu button.danger{color:var(--aws-error)!important}
+html.aws-v4 #context-menu.context-menu button:disabled{opacity:.42}
+html.aws-v4 #context-menu.context-menu .separator{height:1px;margin:5px;background:rgba(135,146,154,.14)}
+
+html.aws-v4 #dialog-layer.dialog-layer{position:fixed;z-index:120000;inset:0;pointer-events:none}
+html.aws-v4 #dialog-layer .dialog-backdrop{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:rgba(6,10,16,.68);backdrop-filter:blur(5px);pointer-events:auto}
+html.aws-v4 #dialog-layer .dialog{width:min(460px,calc(100vw - 28px));max-height:min(680px,calc(100vh - 32px));overflow:auto;padding:18px;background:var(--aws-surface-container);border:1px solid var(--aws-outline-variant);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.52);color:var(--aws-on-surface)}
+html.aws-v4 #dialog-layer .dialog h3{margin:0 0 8px;font-size:16px}
+html.aws-v4 #dialog-layer .dialog p{margin:7px 0;color:var(--aws-on-surface-variant);font-size:12px;line-height:18px}
+html.aws-v4 #dialog-layer .dialog input{width:100%;height:38px!important;background:var(--aws-surface-container-lowest)!important;border-radius:7px!important}
+html.aws-v4 #dialog-layer .dialog-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:16px}
+html.aws-v4 #dialog-layer .dialog-actions .btn{height:34px!important;min-height:34px!important;padding:0 12px!important}
+
+html.aws-v4 #toast-region.toast-region{position:fixed;z-index:130000;right:14px;top:76px;width:min(390px,calc(100vw - 28px));display:flex;flex-direction:column;gap:7px;pointer-events:none}
+html.aws-v4 #toast-region .toast{pointer-events:auto;display:grid;grid-template-columns:18px 1fr 26px;align-items:start;gap:9px;padding:10px 11px;background:var(--aws-surface-container);border:1px solid var(--aws-outline-variant);border-radius:9px;box-shadow:0 16px 45px rgba(0,0,0,.42);font-size:12px;line-height:17px}
+html.aws-v4 #toast-region .toast.success{border-left:3px solid var(--aws-tertiary)}
+html.aws-v4 #toast-region .toast.warning{border-left:3px solid #e4b95b}
+html.aws-v4 #toast-region .toast.error{border-left:3px solid var(--aws-error)}
+html.aws-v4 #toast-region .toast-close{width:26px!important;height:26px!important;min-height:26px!important;padding:4px!important;background:transparent!important}
+
+html.aws-v4 .run-output{position:absolute;right:10px;bottom:36px;width:min(520px,72%);max-height:42%;overflow:auto;padding:10px;background:var(--aws-surface-container-lowest);border:1px solid var(--aws-outline-variant);border-radius:8px;box-shadow:0 14px 45px rgba(0,0,0,.38);color:var(--aws-on-surface-variant);font:400 11px/16px var(--aws-font-code);white-space:pre-wrap;z-index:8}
+
+@media(max-width:680px){
+  html.aws-v4 #toast-region.toast-region{left:8px;right:8px;top:66px;width:auto}
+  html.aws-v4 .run-output{left:8px;right:8px;width:auto;max-height:38%}
+}
