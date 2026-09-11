@@ -1,0 +1,86 @@
+/* Alpine Workspace Applications Launcher
+ * Native launcher visual inspired by GNOME Applications Grid + Windows 11 Start.
+ * No external icon/font dependency; app identities are inline SVG from launcher JS.
+ */
+
+.aws-app-launcher-page{
+  width:min(100%,1120px);
+  margin:0 auto;
+  padding:24px 28px 72px;
+  display:flex;
+  flex-direction:column;
+  gap:30px;
+}
+.aws-app-launcher-head{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:38px}
+.aws-app-launcher-head h1{margin:0;font:600 28px/36px var(--aws-font-ui);letter-spacing:-.025em;color:var(--aws-on-surface)}
+.aws-app-launcher-status{display:inline-flex;align-items:center;gap:7px;border:0!important;background:transparent!important;box-shadow:none!important;padding:5px 0!important;color:var(--aws-outline)!important;font:500 12px/16px var(--aws-font-ui)!important;cursor:pointer}
+.aws-app-launcher-status:hover{color:var(--aws-on-surface)!important}
+.aws-app-launcher-status .dot{width:7px;height:7px;border-radius:50%;background:var(--aws-tertiary);box-shadow:0 0 0 3px rgba(86,229,169,.08)}
+.aws-app-launcher-status svg{width:16px;height:16px;transition:transform .35s ease}
+.aws-app-launcher-status.refreshing svg{transform:rotate(180deg)}
+
+.aws-launcher-discovery{width:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
+.aws-launcher-search-wrap{position:relative;width:min(100%,680px)}
+.aws-launcher-search-wrap>svg{position:absolute;left:16px;top:50%;transform:translateY(-50%);width:21px;height:21px;color:var(--aws-outline);pointer-events:none}
+.aws-launcher-search{
+  width:100%;height:50px;border:1px solid rgba(135,146,154,.22)!important;border-radius:16px!important;
+  background:rgba(28,32,40,.68)!important;color:var(--aws-on-surface)!important;outline:none!important;
+  box-shadow:0 8px 26px rgba(0,0,0,.16)!important;padding:0 78px 0 48px!important;
+  font:400 15px/20px var(--aws-font-ui)!important;transition:background .15s,border-color .15s,box-shadow .15s;
+}
+.aws-launcher-search:hover{background:rgba(28,32,40,.86)!important}
+.aws-launcher-search:focus{background:var(--aws-surface-container)!important;border-color:rgba(142,213,255,.42)!important;box-shadow:0 0 0 3px rgba(56,189,248,.08),0 12px 30px rgba(0,0,0,.18)!important}
+.aws-launcher-search::placeholder{color:rgba(135,146,154,.78)}
+.aws-launcher-search-kbd{position:absolute;right:14px;top:50%;transform:translateY(-50%);padding:3px 7px;border-radius:5px;background:rgba(49,53,62,.72);border:1px solid rgba(135,146,154,.22);color:var(--aws-on-surface-variant);font:500 10px/14px var(--aws-font-code);pointer-events:none}
+
+.aws-launcher-filters{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.aws-launcher-filter{border:1px solid transparent!important;border-radius:999px!important;background:transparent!important;color:var(--aws-outline)!important;box-shadow:none!important;padding:5px 13px!important;font:500 12px/16px var(--aws-font-ui)!important;cursor:pointer;transition:background .14s,color .14s,border-color .14s}
+.aws-launcher-filter:hover{background:rgba(38,42,51,.65)!important;color:var(--aws-on-surface)!important}
+.aws-launcher-filter.active{background:rgba(56,189,248,.12)!important;border-color:rgba(56,189,248,.22)!important;color:var(--aws-primary)!important}
+
+.aws-launcher-section{display:flex;flex-direction:column;gap:12px}
+.aws-launcher-section+.aws-launcher-section{padding-top:24px;border-top:1px solid rgba(62,72,79,.45)}
+.aws-launcher-section-title{padding:0 4px;color:var(--aws-outline);font:600 11px/14px var(--aws-font-ui);letter-spacing:.08em;text-transform:uppercase}
+.aws-launcher-grid{display:grid;grid-template-columns:repeat(6,minmax(86px,1fr));column-gap:8px;row-gap:18px;align-items:start}
+
+.aws-launcher-app{
+  min-width:0;min-height:102px;border:0!important;border-radius:14px!important;background:transparent!important;color:var(--aws-on-surface)!important;
+  box-shadow:none!important;padding:10px 6px!important;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;
+  cursor:pointer;user-select:none;text-align:center;font-family:var(--aws-font-ui)!important;transition:background .14s,transform .14s,color .14s;
+}
+.aws-launcher-app:hover,.aws-launcher-app:focus-visible{background:rgba(255,255,255,.045)!important;color:var(--aws-primary)!important;outline:none!important}
+.aws-launcher-app:active{transform:scale(.97)}
+.aws-launcher-app-icon{width:60px;height:60px;display:grid;place-items:center;flex:none;transition:transform .14s ease;filter:drop-shadow(0 5px 8px rgba(0,0,0,.15))}
+.aws-launcher-app:hover .aws-launcher-app-icon{transform:translateY(-1px) scale(1.04)}
+.aws-launcher-app-icon svg{width:56px;height:56px;display:block;overflow:visible}
+.aws-launcher-app-name{display:block;max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 12px/16px var(--aws-font-ui);color:inherit}
+
+.aws-launcher-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:54px 20px;color:var(--aws-outline);text-align:center}
+.aws-launcher-empty svg{width:34px;height:34px;opacity:.75}
+.aws-launcher-empty strong{color:var(--aws-on-surface);font-size:14px}.aws-launcher-empty span{font-size:12px}
+
+.aws-launcher-context{position:fixed;z-index:99995;min-width:190px;padding:6px;border-radius:12px;background:rgba(24,28,36,.98);border:1px solid rgba(135,146,154,.18);box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(18px)}
+.aws-launcher-context.hidden{display:none}
+.aws-launcher-context button{width:100%;height:34px;display:flex;align-items:center;gap:9px;border:0!important;border-radius:8px!important;background:transparent!important;color:var(--aws-on-surface-variant)!important;box-shadow:none!important;padding:0 10px!important;text-align:left;font:500 12px/16px var(--aws-font-ui)!important;cursor:pointer}
+.aws-launcher-context button:hover{background:var(--aws-surface-container-high)!important;color:var(--aws-on-surface)!important}
+.aws-launcher-context button svg{width:16px;height:16px;flex:none}
+
+.aws-launcher-info-backdrop{position:fixed;inset:0;z-index:99996;display:grid;place-items:center;padding:20px;background:rgba(4,8,14,.58);backdrop-filter:blur(4px)}
+.aws-launcher-info-backdrop.hidden{display:none}
+.aws-launcher-info{width:min(100%,430px);border-radius:18px;background:var(--aws-surface-container-low);border:1px solid rgba(135,146,154,.18);box-shadow:0 24px 70px rgba(0,0,0,.5);padding:20px}
+.aws-launcher-info-top{display:flex;align-items:center;gap:14px;margin-bottom:18px}.aws-launcher-info-top .aws-launcher-app-icon{width:58px;height:58px}.aws-launcher-info-title{min-width:0;flex:1}.aws-launcher-info-title h2{margin:0;color:var(--aws-on-surface);font:600 20px/26px var(--aws-font-ui)}.aws-launcher-info-title span{color:var(--aws-outline);font-size:12px}
+.aws-launcher-info-close{width:34px;height:34px;border:0!important;border-radius:9px!important;background:transparent!important;color:var(--aws-outline)!important;box-shadow:none!important;display:grid;place-items:center;cursor:pointer}.aws-launcher-info-close:hover{background:var(--aws-surface-container-high)!important;color:var(--aws-on-surface)!important}.aws-launcher-info-close svg{width:18px;height:18px}
+.aws-launcher-info-list{display:grid;grid-template-columns:110px 1fr;gap:10px 12px;padding-top:14px;border-top:1px solid rgba(62,72,79,.45);font-size:12px}.aws-launcher-info-list span:nth-child(odd){color:var(--aws-outline)}.aws-launcher-info-list span:nth-child(even){color:var(--aws-on-surface);font-family:var(--aws-font-code);overflow-wrap:anywhere}
+
+.aws-launcher-toast{position:fixed;left:50%;bottom:28px;z-index:99997;transform:translateX(-50%);padding:9px 14px;border-radius:10px;background:var(--aws-surface-container-highest);color:var(--aws-on-surface);box-shadow:0 12px 30px rgba(0,0,0,.35);font:500 12px/16px var(--aws-font-ui);animation:awsLauncherToast .18s ease-out}
+@keyframes awsLauncherToast{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+@media(max-width:1050px){.aws-launcher-grid{grid-template-columns:repeat(5,minmax(82px,1fr))}}
+@media(max-width:840px){.aws-app-launcher-page{padding:20px 18px 64px;gap:26px}.aws-launcher-grid{grid-template-columns:repeat(4,minmax(76px,1fr))}}
+@media(max-width:640px){
+  .aws-app-launcher-page{padding:18px 12px 58px;gap:22px}.aws-app-launcher-head{align-items:flex-start}.aws-app-launcher-head h1{font-size:24px;line-height:30px}.aws-app-launcher-status{font-size:11px}
+  .aws-launcher-search{height:48px}.aws-launcher-search-kbd{display:none}.aws-launcher-search{padding-right:16px!important}
+  .aws-launcher-grid{grid-template-columns:repeat(3,minmax(70px,1fr));row-gap:14px;column-gap:4px}.aws-launcher-app{min-height:98px;padding:8px 3px!important}.aws-launcher-app-icon{width:56px;height:56px}.aws-launcher-app-icon svg{width:52px;height:52px}.aws-launcher-app-name{max-width:92px;font-size:11px}
+  .aws-launcher-info-list{grid-template-columns:88px 1fr}
+}
+@media(max-width:390px){.aws-launcher-grid{grid-template-columns:repeat(3,minmax(64px,1fr))}.aws-app-launcher-status span.status-copy{max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
