@@ -4,10 +4,15 @@
   window.__ALPINE_WS_V4__ = true;
 
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   const bytes=n=>{n=Number(n||0);const u=['B','KiB','MiB','GiB','TiB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return `${n.toFixed(i?1:0)} ${u[i]}`};
   const uptime=s=>{s=Number(s||0);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h ${m}m`:h?`${h}h ${m}m`:`${m}m`};
   let csrf='', session=null, reloadTried=false;
+
+  const WALLPAPER_DB='alpine-workspace-ui';
+  const WALLPAPER_STORE='preferences';
+  const WALLPAPER_KEY='wallpaper';
+  const MAX_WALLPAPER_BYTES=20*1024*1024;
 
   async function ensureSession(force=false){
     if(session&&!force)return session;
@@ -70,11 +75,6 @@
     }catch(_){ }
   }
 
-  function openApp(id,path){
-    active(path);const b=$(`[data-app="${id}"]`);if(!b)return;
-    b.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
-  }
-
   async function info(path){
     active(path);const main=$('#aws-main');main.innerHTML=page('Carregando','Consultando a VM em tempo real.','<div class="aws-v4-loading">Carregando…</div>');
     try{
@@ -92,19 +92,131 @@
     }catch(e){main.innerHTML=page('Falha ao carregar',e.message||'Erro inesperado.','<div class="aws-v4-loading">Atualize a página e tente novamente.</div>')}
   }
 
-  const apps={'pacotes-apk':'packages','terminal-web':'terminal','codigo':'code','docker-containers':'docker','servicos-openrc':'services','arquivos':'files','catalogo-aplicativos':'packages','logs-centralizados':'logs','configuracoes':'settings'};
   const infos=new Set(['sistema','processos','armazenamento','rede','usuarios','acesso-ssh','rede-privada','proxmox-cluster']);
-  function route(e){const b=e.target.closest('[data-aws-path]');if(!b||!b.closest('#aws-shell'))return;const p=b.dataset.awsPath;if(p==='dashboard'){setTimeout(hydrate,120);return}if(apps[p]||infos.has(p)){e.preventDefault();e.stopImmediatePropagation();apps[p]?openApp(apps[p],p):info(p)}}
+  function route(e){
+    const b=e.target.closest?.('[data-aws-path]');
+    if(!b||!b.closest('#aws-shell'))return;
+    const p=b.dataset.awsPath;
+    if(p==='dashboard'){setTimeout(hydrate,120);return}
+    if(!infos.has(p))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    info(p);
+  }
+
+  function dbOpen(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window)){reject(new Error('IndexedDB não está disponível neste navegador.'));return}
+      const request=indexedDB.open(WALLPAPER_DB,1);
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(WALLPAPER_STORE))db.createObjectStore(WALLPAPER_STORE)};
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error('Não foi possível abrir o armazenamento local.'));
+    });
+  }
+  async function dbGet(key){
+    const db=await dbOpen();
+    try{return await new Promise((resolve,reject)=>{const tx=db.transaction(WALLPAPER_STORE,'readonly');const req=tx.objectStore(WALLPAPER_STORE).get(key);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}finally{db.close()}
+  }
+  async function dbSet(key,value){
+    const db=await dbOpen();
+    try{await new Promise((resolve,reject)=>{const tx=db.transaction(WALLPAPER_STORE,'readwrite');tx.objectStore(WALLPAPER_STORE).put(value,key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}finally{db.close()}
+  }
+  async function dbDelete(key){
+    const db=await dbOpen();
+    try{await new Promise((resolve,reject)=>{const tx=db.transaction(WALLPAPER_STORE,'readwrite');tx.objectStore(WALLPAPER_STORE).delete(key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}finally{db.close()}
+  }
+  function blobToDataUrl(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(r.error||new Error('Falha ao ler a imagem.'));r.readAsDataURL(blob)})}
+  function validateImageBlob(blob){
+    if(!blob||!String(blob.type||'').startsWith('image/'))throw new Error('O arquivo informado não é uma imagem válida.');
+    if(blob.size>MAX_WALLPAPER_BYTES)throw new Error('O wallpaper deve ter no máximo 20 MiB.');
+  }
+  async function wallpaperFromUrl(raw){
+    let url;
+    try{url=new URL(String(raw||'').trim())}catch(_){throw new Error('Informe uma URL válida de imagem.')}
+    if(!['http:','https:'].includes(url.protocol))throw new Error('Use uma URL http:// ou https://.');
+    let response;
+    try{response=await fetch(url.href,{mode:'cors',cache:'no-store',credentials:'omit'})}catch(_){throw new Error('Não foi possível baixar essa imagem. O servidor da URL precisa permitir acesso CORS.')}
+    if(!response.ok)throw new Error(`A imagem respondeu HTTP ${response.status}.`);
+    const blob=await response.blob();validateImageBlob(blob);
+    const dataUrl=await blobToDataUrl(blob);
+    return {source:'url',url:url.href,name:url.pathname.split('/').pop()||'wallpaper',dataUrl,updatedAt:Date.now()};
+  }
+  async function wallpaperFromFile(file){
+    validateImageBlob(file);
+    const dataUrl=await blobToDataUrl(file);
+    return {source:'upload',url:'',name:file.name||'wallpaper',dataUrl,updatedAt:Date.now()};
+  }
+  function ensureWallpaperStyles(){
+    if($('#aws-wallpaper-style'))return;
+    const style=document.createElement('style');style.id='aws-wallpaper-style';style.textContent=`
+      .aws-main.aws-wallpaper-active{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;background-attachment:fixed!important}
+      .aws-main.aws-wallpaper-active .aws-section,.aws-main.aws-wallpaper-active .aws-metric-card,.aws-main.aws-wallpaper-active .aws-v4-panel{background:rgba(18,23,31,.84)!important;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+      .aws-wallpaper-controls{display:grid;gap:10px;margin-top:10px}
+      .aws-wallpaper-url-row{display:flex;gap:8px;align-items:center}.aws-wallpaper-url-row input{min-width:0;flex:1}
+      .aws-wallpaper-actions{display:flex;gap:8px;flex-wrap:wrap}.aws-wallpaper-actions button{min-height:34px}
+      .aws-wallpaper-preview{height:150px;border-radius:8px;border:1px solid var(--aws-outline-variant);background:var(--aws-surface-container-lowest);background-size:cover;background-position:center;display:grid;place-items:center;color:var(--aws-outline);overflow:hidden}
+      .aws-wallpaper-status{font-size:12px;color:var(--aws-on-surface-variant);min-height:18px}.aws-wallpaper-status.error{color:var(--aws-error)}.aws-wallpaper-status.ok{color:var(--aws-tertiary)}
+    `;document.head.appendChild(style);
+  }
+  function applyWallpaper(record){
+    ensureWallpaperStyles();
+    const main=$('#aws-main');if(!main)return;
+    if(!record?.dataUrl){main.classList.remove('aws-wallpaper-active');main.style.backgroundImage='';return}
+    main.classList.add('aws-wallpaper-active');
+    main.style.backgroundImage=`linear-gradient(rgba(15,19,28,.48),rgba(15,19,28,.66)),url(${JSON.stringify(record.dataUrl)})`;
+  }
+  async function restoreWallpaper(){try{applyWallpaper(await dbGet(WALLPAPER_KEY))}catch(_){}}
+  function updateWallpaperPanel(section,record){
+    const preview=$('[data-wallpaper-preview]',section),status=$('[data-wallpaper-status]',section),url=$('[data-wallpaper-url]',section);
+    if(url&&record?.source==='url')url.value=record.url||'';
+    if(preview){preview.style.backgroundImage=record?.dataUrl?`url(${JSON.stringify(record.dataUrl)})`:'';preview.textContent=record?.dataUrl?'': 'Nenhum wallpaper configurado';}
+    if(status&&record?.dataUrl){status.className='aws-wallpaper-status ok';status.textContent=`Ativo: ${record.name||'wallpaper'} · salvo somente neste navegador.`}
+  }
+  function enhanceWallpaperSettings(win){
+    if(win.dataset.awsWallpaper==='1')return;
+    const settings=$('.settings-app',win);if(!settings)return;
+    win.dataset.awsWallpaper='1';ensureWallpaperStyles();
+    const section=document.createElement('section');section.className='settings-section';section.dataset.wallpaperSection='1';section.innerHTML=`
+      <h3>Wallpaper</h3>
+      <p>Personalize o fundo do Workspace. A imagem fica armazenada somente neste navegador.</p>
+      <div class="aws-wallpaper-controls">
+        <div class="aws-wallpaper-url-row"><input type="url" data-wallpaper-url placeholder="https://exemplo.com/wallpaper.jpg"><button class="btn" type="button" data-wallpaper-apply-url>Usar URL</button></div>
+        <div class="aws-wallpaper-actions"><button class="btn" type="button" data-wallpaper-upload>Enviar imagem</button><input type="file" accept="image/*" data-wallpaper-file hidden><button class="btn ghost" type="button" data-wallpaper-remove>Remover wallpaper</button></div>
+        <div class="aws-wallpaper-preview" data-wallpaper-preview>Nenhum wallpaper configurado</div>
+        <div class="aws-wallpaper-status" data-wallpaper-status>URL externa precisa permitir CORS. Limite do upload: 20 MiB.</div>
+      </div>`;
+    const appearance=$('.settings-section',settings);if(appearance?.nextSibling)settings.insertBefore(section,appearance.nextSibling);else settings.prepend(section);
+    const status=$('[data-wallpaper-status]',section),urlInput=$('[data-wallpaper-url]',section),fileInput=$('[data-wallpaper-file]',section);
+    const show=(message,kind='')=>{status.className=`aws-wallpaper-status ${kind}`.trim();status.textContent=message};
+    $('[data-wallpaper-apply-url]',section).addEventListener('click',async()=>{
+      const url=urlInput.value.trim();if(!url){show('Cole uma URL de imagem primeiro.','error');return}
+      try{show('Baixando e preparando o wallpaper...');const record=await wallpaperFromUrl(url);await dbSet(WALLPAPER_KEY,record);applyWallpaper(record);updateWallpaperPanel(section,record);show('Wallpaper aplicado e salvo neste navegador.','ok')}catch(e){show(e.message||'Falha ao aplicar wallpaper.','error')}
+    });
+    $('[data-wallpaper-upload]',section).addEventListener('click',()=>fileInput.click());
+    fileInput.addEventListener('change',async()=>{
+      const file=fileInput.files?.[0];if(!file)return;
+      try{show('Processando imagem...');const record=await wallpaperFromFile(file);await dbSet(WALLPAPER_KEY,record);applyWallpaper(record);updateWallpaperPanel(section,record);show('Wallpaper enviado e aplicado.','ok')}catch(e){show(e.message||'Falha ao aplicar wallpaper.','error')}finally{fileInput.value=''}
+    });
+    $('[data-wallpaper-remove]',section).addEventListener('click',async()=>{
+      try{await dbDelete(WALLPAPER_KEY)}catch(_){}
+      applyWallpaper(null);urlInput.value='';updateWallpaperPanel(section,null);show('Wallpaper removido.','ok');
+    });
+    dbGet(WALLPAPER_KEY).then(record=>updateWallpaperPanel(section,record)).catch(()=>{});
+  }
 
   function enhanceWindows(){
-    $$('.app-window').forEach(w=>{if(w.dataset.awsV4)return;w.dataset.awsV4='1';const c=$('.window-content',w),t=$('.window-title',w)?.textContent||'Aplicativo';if(!c)return;const r=document.createElement('div');r.className='aws-v4-ribbon';r.innerHTML=`<b>${esc(t)}</b><span>VM local</span>`;c.prepend(r)});
+    $$('.app-window').forEach(w=>{
+      if(!w.dataset.awsV4){w.dataset.awsV4='1';const c=$('.window-content',w),t=$('.window-title',w)?.textContent||'Aplicativo';if(c){const r=document.createElement('div');r.className='aws-v4-ribbon';r.innerHTML=`<b>${esc(t)}</b><span>VM local</span>`;c.prepend(r)}}
+      if(w.dataset.app==='settings')enhanceWallpaperSettings(w);
+    });
   }
 
   function install(){
     document.documentElement.classList.add('aws-v4');document.addEventListener('click',route,true);
     const layer=$('#window-layer');if(layer)new MutationObserver(enhanceWindows).observe(layer,{childList:true,subtree:true});
     const shell=$('#aws-shell');if(shell)new MutationObserver(()=>applyIdentity()).observe(shell,{childList:true,subtree:true,characterData:true});
-    ensureSession().then(()=>{applyIdentity();setTimeout(hydrate,100);setInterval(hydrate,5000)}).catch(()=>{});enhanceWindows();
+    ensureSession().then(()=>{applyIdentity();setTimeout(hydrate,100);setInterval(hydrate,5000)}).catch(()=>{});
+    restoreWallpaper();enhanceWindows();
   }
   document.readyState==='loading'?document.addEventListener('DOMContentLoaded',install,{once:true}):install();
 })();
