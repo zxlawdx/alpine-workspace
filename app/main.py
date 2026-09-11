@@ -27,6 +27,7 @@ from app.docker.service import (
     resources as docker_resources,
 )
 from app.filesystem import service as fs
+from app.services.host_details import get_network_info, get_storage_info, get_users
 from app.services.jobs import job_manager
 from app.services.logs import available_sources, tail_file
 from app.services.openrc import list_services, service_action
@@ -86,7 +87,6 @@ async def http_exception_handler(_: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(_: Request, exc: Exception):
     logger.exception('Erro não tratado no Workspace', exc_info=exc)
-    # O navegador recebe apenas uma mensagem sanitizada.
     return JSONResponse(
         {'ok': False, 'error': {'code': 'INTERNAL_ERROR', 'message': 'O Workspace encontrou um erro interno.'}},
         status_code=500,
@@ -115,9 +115,29 @@ def system_info():
     return {'ok': True, 'system': get_system_info()}
 
 
+@app.get('/api/metrics')
+def metrics():
+    return {'ok': True, 'metrics': get_system_info()}
+
+
 @app.get('/api/system/processes')
 def processes(limit: int = Query(20, ge=1, le=100)):
     return {'ok': True, 'processes': get_processes(limit)}
+
+
+@app.get('/api/system/storage')
+def storage():
+    return {'ok': True, **get_storage_info()}
+
+
+@app.get('/api/system/network')
+def network():
+    return {'ok': True, **get_network_info()}
+
+
+@app.get('/api/system/users')
+def users():
+    return {'ok': True, **get_users()}
 
 
 class PathModel(BaseModel):
