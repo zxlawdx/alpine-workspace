@@ -1,0 +1,34 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate Python syntax
+        run: python -m compileall -q app
+      - name: Validate JavaScript syntax
+        run: |
+          node --check web/js/alpinews-v3.js
+          node --check web/js/alpinews-v4.js
+          node --check web/js/ui-refresh.js
+      - name: Check v4 assets are referenced
+        run: |
+          grep -q 'alpinews-v4.css' web/index.html
+          grep -q 'alpinews-v4.js' web/index.html
+          test -f app/services/host_details.py
+          test -f update-local.sh
