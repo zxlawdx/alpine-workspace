@@ -62,6 +62,6 @@ export function escapeHTML(value=''){
   return String(value).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
 
-export function icon(name, cls=''){
+export function icon(name, cls='icon'){
   return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 }
