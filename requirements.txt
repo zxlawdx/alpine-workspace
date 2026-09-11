@@ -1,0 +1,4 @@
+# Runtime packages are installed from Alpine repositories by install-pibic-workspace.sh
+fastapi
+uvicorn
+websockets

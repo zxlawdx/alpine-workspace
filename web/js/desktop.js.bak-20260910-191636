@@ -1,0 +1,91 @@
+import {initSession,api,formatBytes,escapeHTML,icon} from './api.js';
+import {APPS,mountApp} from './apps.js';
+import {WindowManager} from './window-manager.js';
+
+const $=s=>document.querySelector(s);
+const desktop=$('#desktop'),desktopArea=$('#desktop-area'),launcher=$('#launcher'),launcherSearch=$('#launcher-search'),launcherResults=$('#launcher-results'),contextMenuEl=$('#context-menu'),toastRegion=$('#toast-region'),dialogLayer=$('#dialog-layer'),notificationCenter=$('#notification-center'),notificationHistory=$('#notification-history'),notificationCount=$('#notification-count'),quickStatus=$('#quick-status');
+const wm=new WindowManager($('#window-layer'),$('#running-apps'));
+let launcherIndex=0,launcherFiltered=[...APPS],notifications=[],lastSystem=null;
+
+function applyTheme(){
+  const pref=localStorage.getItem('pibic-theme')||'dark';
+  const actual=pref==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):pref;
+  document.documentElement.dataset.theme=actual;
+}
+applyTheme();
+matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>{if((localStorage.getItem('pibic-theme')||'dark')==='system')applyTheme()});
+
+function notify(message,type='information'){
+  const row={id:crypto.randomUUID(),message:String(message),type,time:new Date()};notifications.unshift(row);notifications=notifications.slice(0,50);renderNotificationCenter();
+  const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`${icon(type==='error'?'warning':'info')}<div>${escapeHTML(message)}</div><button class="toast-close" aria-label="Fechar">${icon('close')}</button>`;toastRegion.appendChild(el);const remove=()=>el.remove();el.querySelector('.toast-close').addEventListener('click',remove);setTimeout(remove,type==='error'?7000:4200);
+}
+function renderNotificationCenter(){
+  notificationHistory.innerHTML=notifications.length?notifications.map(n=>`<div class="notification-item"><strong>${escapeHTML(n.message)}</strong><small>${escapeHTML(n.type)} · ${n.time.toLocaleTimeString()}</small></div>`).join(''):'<div style="color:var(--muted);padding:8px">Nenhuma notificação nesta sessão.</div>';
+  notificationCount.textContent=String(notifications.length);notificationCount.classList.toggle('hidden',notifications.length===0);
+}
+
+function closeTransient(except=null){
+  if(except!=='launcher')launcher.classList.add('hidden');if(except!=='status')quickStatus.classList.add('hidden');if(except!=='notifications')notificationCenter.classList.add('hidden');contextMenuEl.classList.add('hidden');
+}
+
+function contextMenu(x,y,items){
+  contextMenuEl.innerHTML=items.map((it,i)=>it.separator?'<div class="separator"></div>':`<button data-mi="${i}" class="${it.danger?'danger':''}" ${it.disabled?'disabled':''}>${it.icon?icon(it.icon):'<span style="width:20px"></span>'}<span>${escapeHTML(it.label)}</span></button>`).join('');
+  contextMenuEl.classList.remove('hidden');const r=contextMenuEl.getBoundingClientRect();contextMenuEl.style.left=`${Math.max(6,Math.min(innerWidth-r.width-6,x))}px`;contextMenuEl.style.top=`${Math.max(6,Math.min(innerHeight-r.height-6,y))}px`;
+  contextMenuEl.onclick=e=>{const b=e.target.closest('[data-mi]');if(!b||b.disabled)return;const it=items[Number(b.dataset.mi)];contextMenuEl.classList.add('hidden');try{it.action?.()}catch(err){notify(err.message,'error')}};
+}
+window.addEventListener('workspace-context-menu',e=>contextMenu(e.detail.x,e.detail.y,e.detail.items));
+
+function dialogBase(title,message,{pre=false}={}){
+  const back=document.createElement('div');back.className='dialog-backdrop';back.innerHTML=`<div class="dialog" role="dialog" aria-modal="true"><h3>${escapeHTML(title)}</h3>${pre?`<pre style="white-space:pre-wrap;max-height:55vh;overflow:auto;user-select:text;font-family:var(--mono)">${escapeHTML(message)}</pre>`:`<p>${escapeHTML(message).replace(/\n/g,'<br>')}</p>`}<div data-dialog-body></div><div class="dialog-actions"></div></div>`;dialogLayer.appendChild(back);return back;
+}
+function confirmDialog(title,message,okLabel='Confirmar',danger=false){return new Promise(resolve=>{const back=dialogBase(title,message);const a=back.querySelector('.dialog-actions');a.innerHTML=`<button class="btn" data-no>Cancelar</button><button class="btn ${danger?'danger':'primary'}" data-yes>${escapeHTML(okLabel)}</button>`;const end=v=>{back.remove();resolve(v)};back.querySelector('[data-no]').onclick=()=>end(false);back.querySelector('[data-yes]').onclick=()=>end(true);back.addEventListener('keydown',e=>{if(e.key==='Escape')end(false)});back.querySelector('[data-no]').focus()})}
+function inputDialog(title,message,value=''){return new Promise(resolve=>{const back=dialogBase(title,message);const body=back.querySelector('[data-dialog-body]');body.innerHTML='<input data-input>';const input=body.querySelector('input');input.value=value;const a=back.querySelector('.dialog-actions');a.innerHTML='<button class="btn" data-no>Cancelar</button><button class="btn primary" data-yes>OK</button>';const end=v=>{back.remove();resolve(v)};back.querySelector('[data-no]').onclick=()=>end(null);back.querySelector('[data-yes]').onclick=()=>end(input.value.trim());input.addEventListener('keydown',e=>{if(e.key==='Enter')end(input.value.trim());if(e.key==='Escape')end(null)});input.focus();input.select()})}
+function messageDialog(title,message,pre=false){return new Promise(resolve=>{const back=dialogBase(title,message,{pre});const a=back.querySelector('.dialog-actions');a.innerHTML='<button class="btn primary" data-ok>OK</button>';const end=()=>{back.remove();resolve()};back.querySelector('[data-ok]').onclick=end;back.addEventListener('keydown',e=>{if(e.key==='Escape'||e.key==='Enter')end()});back.querySelector('[data-ok]').focus()})}
+function choiceDialog(title,message,choices){return new Promise(resolve=>{const back=dialogBase(title,message);const body=back.querySelector('[data-dialog-body]');body.innerHTML=`<div style="display:grid;gap:6px;max-height:45vh;overflow:auto">${choices.map((c,i)=>`<button class="btn ${c.danger?'danger':''}" data-choice="${i}" style="justify-content:flex-start;text-align:left;height:auto;min-height:34px;padding:8px 10px">${escapeHTML(c.label)}</button>`).join('')}</div>`;const a=back.querySelector('.dialog-actions');a.innerHTML='<button class="btn" data-cancel>Cancelar</button>';const end=v=>{back.remove();resolve(v)};body.onclick=e=>{const b=e.target.closest('[data-choice]');if(b)end(choices[Number(b.dataset.choice)].id)};back.querySelector('[data-cancel]').onclick=()=>end(null);back.addEventListener('keydown',e=>{if(e.key==='Escape')end(null)});body.querySelector('button')?.focus()})}
+
+const ctx={notify,contextMenu,confirmDialog,inputDialog,messageDialog,choiceDialog,applyTheme,openApp};
+function openApp(id,options={}){
+  const app=APPS.find(a=>a.id===id);if(!app)return;
+  const sizes={system:[760,620],files:[900,610],terminal:[860,560],code:[980,680],packages:[800,600],services:[850,620],docker:[880,620],logs:[840,560],settings:[720,600]};const [width,height]=sizes[id]||[800,600];
+  const win=wm.open(id,{title:app.name,iconName:app.icon,width,height,multi:!!app.multi});
+  if(win.content.dataset.mounted==='1'){
+    if(id==='code'&&options.path) win.content.dispatchEvent(new CustomEvent('code-open-file',{detail:{path:options.path}}));
+    return win;
+  }
+  win.content.dataset.mounted='1';mountApp(id,win,ctx,options);return win;
+}
+
+function renderDesktop(){desktopArea.innerHTML=APPS.map(a=>`<button class="desktop-icon" data-app="${a.id}" aria-label="Abrir ${escapeHTML(a.name)}">${icon(a.icon)}<span>${escapeHTML(a.name)}</span></button>`).join('');$('#favorite-apps').innerHTML=APPS.filter(a=>a.favorite).map(a=>`<button class="taskbar-button" data-fav="${a.id}" title="${escapeHTML(a.name)}">${icon(a.icon)}</button>`).join('')}
+renderDesktop();
+desktopArea.addEventListener('dblclick',e=>{const b=e.target.closest('[data-app]');if(b)openApp(b.dataset.app)});desktopArea.addEventListener('click',e=>{desktopArea.querySelectorAll('.desktop-icon').forEach(x=>x.classList.remove('selected'));e.target.closest('[data-app]')?.classList.add('selected')});
+$('#favorite-apps').addEventListener('click',e=>{const b=e.target.closest('[data-fav]');if(b)openApp(b.dataset.fav)});
+
+function renderLauncher(filter=''){
+  const q=filter.trim().toLowerCase();launcherFiltered=APPS.filter(a=>a.name.toLowerCase().includes(q)||a.id.includes(q));launcherIndex=Math.min(launcherIndex,Math.max(0,launcherFiltered.length-1));launcherResults.innerHTML=launcherFiltered.map((a,i)=>`<button class="launcher-item ${i===launcherIndex?'keyboard':''}" data-launch="${a.id}">${icon(a.icon)}<span>${escapeHTML(a.name)}</span></button>`).join('')}
+function toggleLauncher(force){const show=force??launcher.classList.contains('hidden');closeTransient('launcher');launcher.classList.toggle('hidden',!show);if(show){launcherSearch.value='';launcherIndex=0;renderLauncher();setTimeout(()=>launcherSearch.focus(),0)}}
+renderLauncher();launcherSearch.addEventListener('input',()=>renderLauncher(launcherSearch.value));launcherResults.addEventListener('click',e=>{const b=e.target.closest('[data-launch]');if(b){openApp(b.dataset.launch);toggleLauncher(false)}});launcherSearch.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();launcherIndex=Math.min(launcherFiltered.length-1,launcherIndex+1);renderLauncher(launcherSearch.value)}else if(e.key==='ArrowUp'){e.preventDefault();launcherIndex=Math.max(0,launcherIndex-1);renderLauncher(launcherSearch.value)}else if(e.key==='Enter'&&launcherFiltered[launcherIndex]){openApp(launcherFiltered[launcherIndex].id);toggleLauncher(false)}else if(e.key==='Escape')toggleLauncher(false)});
+$('#launcher-button').onclick=()=>toggleLauncher();$('#brand-button').onclick=()=>toggleLauncher();
+
+$('#notification-button').onclick=()=>{const show=notificationCenter.classList.contains('hidden');closeTransient('notifications');notificationCenter.classList.toggle('hidden',!show)};notificationCenter.addEventListener('click',e=>{if(e.target.closest('[data-action="clear-notifications"]')){notifications=[];renderNotificationCenter()}});
+
+async function updateSystem(){try{const d=await api('/api/system');lastSystem=d.system;$('#hostname').textContent=lastSystem.hostname;$('#top-cpu').textContent=`CPU ${lastSystem.cpu_percent}%`;$('#top-ram').textContent=`RAM ${lastSystem.memory.percent}%`;renderQuickStatus();setConnection(true)}catch(_){setConnection(false)}}
+function renderQuickStatus(){if(!lastSystem)return;quickStatus.innerHTML=`<div class="panel-title"><strong>Sistema</strong><span class="badge running">Conectado</span></div><div class="status-grid"><span>Alpine / Host</span><strong>${escapeHTML(lastSystem.hostname)}</strong><span>CPU</span><strong>${lastSystem.cpu_percent}%</strong><span>RAM</span><strong>${formatBytes(lastSystem.memory.used)} / ${formatBytes(lastSystem.memory.total)}</strong><span>Disco</span><strong>${formatBytes(lastSystem.disk.used)} / ${formatBytes(lastSystem.disk.total)}</strong><span>Kernel</span><strong>${escapeHTML(lastSystem.kernel)}</strong></div><div class="status-meter"><i style="width:${lastSystem.cpu_percent}%"></i></div><div class="status-meter"><i style="width:${lastSystem.memory.percent}%"></i></div><p style="color:var(--muted);font-size:11px;margin:8px 0 0">Operações de desligamento, reboot e alterações de rede não são expostas nesta versão.</p>`}
+$('#status-button').onclick=()=>{const show=quickStatus.classList.contains('hidden');closeTransient('status');quickStatus.classList.toggle('hidden',!show)};
+function setConnection(online){const dot=$('#connection-dot'),label=$('#connection-label');dot.classList.toggle('online',online);dot.classList.toggle('offline',!online);label.textContent=online?'Conectado':'Desconectado'}
+window.addEventListener('workspace-connection',e=>setConnection(!!e.detail.online));
+
+function tickClock(){$('#clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}tickClock();setInterval(tickClock,15000);
+
+desktopArea.addEventListener('contextmenu',e=>{if(e.target.closest('[data-app]'))return;e.preventDefault();contextMenu(e.clientX,e.clientY,[{label:'Novo Terminal',icon:'terminal',action:()=>openApp('terminal')},{label:'Atualizar sistema',icon:'refresh',action:updateSystem}])});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('.context-menu'))contextMenuEl.classList.add('hidden');if(!e.target.closest('.launcher')&&!e.target.closest('#launcher-button')&&!e.target.closest('#brand-button'))launcher.classList.add('hidden');if(!e.target.closest('.quick-status')&&!e.target.closest('#status-button'))quickStatus.classList.add('hidden');if(!e.target.closest('.notification-center')&&!e.target.closest('#notification-button'))notificationCenter.classList.add('hidden')});
+
+document.addEventListener('keydown',e=>{
+  const t=e.target;const editing=t instanceof HTMLInputElement||t instanceof HTMLTextAreaElement||t?.isContentEditable||t?.closest?.('.xterm')||t?.closest?.('.cm-editor');
+  if(e.key==='Escape'){contextMenuEl.classList.add('hidden');launcher.classList.add('hidden');quickStatus.classList.add('hidden');notificationCenter.classList.add('hidden');return}
+  if(!editing&&((e.ctrlKey&&e.code==='Space')||e.key==='Meta')){e.preventDefault();toggleLauncher(true)}
+});
+
+async function boot(){
+  try{await initSession();setConnection(true);await updateSystem();setInterval(updateSystem,5000)}catch(e){setConnection(false);notify(`Falha ao iniciar sessão: ${e.message}`,'error')}
+}
+boot();

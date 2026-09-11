@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+name="PIBIC Workspace"
+description="Web Desktop Environment local para a VM do laboratório"
+command="/usr/bin/python3"
+command_args="-m uvicorn app.main:app --host 127.0.0.1 --port 8765 --workers 1 --no-proxy-headers --log-level info"
+command_user="law"
+directory="/opt/pibic-workspace"
+supervisor="supervise-daemon"
+output_log="/var/log/pibic-workspace.log"
+error_log="/var/log/pibic-workspace.log"
+respawn_delay=2
+respawn_max=5
+respawn_period=60
+
+depend() {
+    need net
+    after networking
+}
