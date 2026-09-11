@@ -28,6 +28,7 @@ jobs:
           node --check web/js/alpinews-launcher.js
           node --check web/js/app-workbench.js
           node --check web/js/mint-workspace.js
+          node --check web/js/native-app-bridge.js
           node --check web/js/api.js
           node --check web/js/apps.js
           node --check web/js/desktop.js
@@ -43,12 +44,14 @@ jobs:
           grep -q 'app-workbench.js?v=4.4.0' web/index.html
           grep -q 'mint-desktop.css?v=4.4.0' web/index.html
           grep -q 'mint-workspace.js?v=4.4.0' web/index.html
+          grep -q 'native-app-bridge.js?v=4.4.1' web/index.html
           test -s web/css/alpinews-launcher.css
           test -s web/js/alpinews-launcher.js
           test -s web/css/app-workbench.css
           test -s web/js/app-workbench.js
           test -s web/css/mint-desktop.css
           test -s web/js/mint-workspace.js
+          test -s web/js/native-app-bridge.js
           ! grep -q 'ui-refresh.js' web/index.html
           ! grep -q 'ui-refresh.css' web/index.html
       - name: Validate deploy scripts
